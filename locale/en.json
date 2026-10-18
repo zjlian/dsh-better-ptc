@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Better PTC",
+    "description": "Repairs run_code calls in place: fixes TypeScript compile errors in the program and generates the missing description argument, then re-runs the call without a model retry."
+  }
+}

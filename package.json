@@ -1,0 +1,44 @@
+{
+  "name": "dsh-better-ptc",
+  "version": "0.1.0",
+  "description": "In-place auto-repair for DeepSeek Harness PTC run_code calls: fixes TypeScript compile-stage program errors and generates the missing description argument, then re-runs the call without a model retry round-trip.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/types",
+    "src",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg"
+  ],
+  "engines": {
+    "dsh": "0.2.1-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "ptc",
+    "plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zjlian/dsh-better-ptc.git"
+  }
+}

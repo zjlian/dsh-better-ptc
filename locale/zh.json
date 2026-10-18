@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Better PTC（run_code 就地修复）",
+    "description": "就地修复 run_code 调用：修复程序编译错误并补全缺失的 description 参数后原地重跑，不再让模型为这类失败来回重试、浪费上下文。"
+  }
+}

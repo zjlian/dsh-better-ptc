@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Better PTC">
+  <rect width="64" height="64" rx="14" fill="#16283c"/>
+  <path d="M22 17 L9 32 L22 47" fill="none" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M42 17 L55 32 L42 47" fill="none" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M36.5 14.5a8 8 0 0 0-9.4 11.4L18 35l4 4 9.1-9.1a8 8 0 0 0 11.4-9.4l-5 5-4.6-1.2-1.2-4.6 5-5a8 8 0 0 0-.2 2.8z" fill="#fbbf24" fill-rule="evenodd"/>
+</svg>
