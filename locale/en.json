@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Better PTC",
-    "description": "Repairs run_code calls in place: fixes TypeScript compile errors in the program and generates the missing description argument, then re-runs the call without a model retry."
+    "title": "Better PTC (toolkit)",
+    "description": "Personal workflow toolbox for DSH. Host-global: repairs run_code calls in place. PTC-mode sessions: loads Claude-Code-style markdown commands from commands/ directories as slash commands with $ARGUMENTS expansion; project commands shadow same-name user and built-in commands."
   }
 }
