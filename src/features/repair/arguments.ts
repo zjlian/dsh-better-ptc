@@ -22,9 +22,11 @@ export interface ArgumentFailure {
 /**
  * Determine whether one call's arguments are invalid only in its `description`.
  * The check runs before the registry validates the call, so it sees exactly the
- * arguments the tool body would reject. Repairability is narrow on purpose: the
- * generated value is one short description, and only violations naming that
- * argument can be resolved by it.
+ * arguments the tool body would reject. Repairability is decided behaviorally:
+ * supplying a well-formed placeholder description must clear every violation,
+ * which keeps this plugin independent of the validator's message wording.
+ * Repair stays narrow on purpose: the generated value is one short description,
+ * and no other argument may be rewritten.
  * @param parameters - the tool's current model-facing parameter schema.
  * @param args - the parsed arguments the registry is about to validate.
  * @returns the repairable failure, or `undefined` when the arguments are valid
@@ -41,8 +43,13 @@ export function preflightArguments(parameters: unknown, args: unknown): Argument
   }
   const violations = validateJsonSchemaValue(schema, args, '')
   if (violations.length === 0) return blankDescription(args) ? { schema, violations } : undefined
-  return violations.every(isDescriptionViolation) ? { schema, violations } : undefined
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return undefined
+  const probed = validateJsonSchemaValue(schema, { ...args, description: PROBE_DESCRIPTION }, '')
+  return probed.length === 0 ? { schema, violations } : undefined
 }
+
+/** A description that satisfies any schema the argument accepts as a string. */
+const PROBE_DESCRIPTION = '_'
 
 /**
  * Validate a repaired argument object against the schema the original
@@ -54,12 +61,6 @@ export function preflightArguments(parameters: unknown, args: unknown): Argument
  */
 export function violationsOf(schema: JsonSchemaNode, args: unknown): readonly string[] {
   return validateJsonSchemaValue(schema, args, '')
-}
-
-/** The two schema violations a generated description can resolve. */
-function isDescriptionViolation(violation: string): boolean {
-  return violation === 'missing required property "description"'
-    || violation === '"description" must be a string'
 }
 
 /** Whether the arguments passed schema validation but their description is only whitespace. */

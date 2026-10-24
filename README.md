@@ -4,7 +4,7 @@
 
 中文用户:本插件给 DSH 的 PTC 模式增加「markdown 文件即斜杠命令」与 `run_code` 自动修复两个能力,安装方式见下。
 
-[![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.2-blue)](#requirements)
+[![DSH](https://img.shields.io/badge/DSH-%3E%3D0.2.1--rc.3-blue)](#requirements)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
@@ -12,11 +12,11 @@
 - **Markdown slash commands** — drop a `.md` file into a `commands/` directory, get a `/command`. Claude Code compatible: frontmatter metadata, `$ARGUMENTS` templating, project-over-user shadowing, optional `.claude/commands/` interop.
 - **`run_code` auto-repair** — when a PTC `run_code` call is rejected before execution (compile error, missing `description`), one auxiliary model call fixes it and the program reruns inside the same tool call, instead of burning a full retry round-trip.
 
-Both features are host-side only. Commands appear in the `/` menu of **PTC-mode sessions only**; no other mode is touched.
+Both features ride one host-global loader row. Commands appear in the `/` menu of sessions whose agent preset is listed in the config (default: **PTC only**); other modes are not touched.
 
 ## Requirements
 
-- DeepSeek Harness **0.2.1-rc.2** (exact version — enforced by `engines.dsh`, see [Limitations](#limitations)).
+- DeepSeek Harness **≥ 0.2.1-rc.3, < 0.3.0** (enforced by `engines.dsh` as a SemVer range; older versions are not supported).
 
 ## Installation
 
@@ -57,7 +57,7 @@ Open a PTC-mode session, type `/deploy`, press <kbd>Enter</kbd>.
 | User | `~/.dsh/commands/` | |
 | Opt-in | `.claude/commands/` + `~/.claude/commands/` | Enable with [`includeClaudeDirs`](#commands) |
 
-Project roots are found by walking up from the nearest `.git`; project directories are discovered lazily on the session's first event. A command defined in both scopes resolves to the **project** one.
+Project roots are found by walking up from the nearest `.git`; project directories are discovered lazily as qualifying sessions appear. A command defined in both scopes resolves to the **project** one.
 
 ### File format
 
@@ -71,7 +71,7 @@ $ARGUMENTS, or the Nth word (0-based, quote-split) with $ARGUMENTS[N] or $N.
 Escape a literal dollar sign with \$.
 ```
 
-- **Command name** = the file's relative path, kebab-cased, subdirectories joined with `-` (`frontend/component.md` → `/frontend-component`).
+- **Command name** = the file's relative path, kebab-cased, subdirectories joined with `-` (`frontend/component.md` → `/frontend-component`). The name must start with a lowercase letter, matching DSH's command grammar.
 - If the body contains no placeholder but you pass arguments, the input is appended as `ARGUMENTS: <input>`.
 - Frontmatter keys beyond `description` / `argument-hint` (e.g. `allowed-tools`, `model`) are recognized but ignored, with a warning.
 - Execution runs on the UI command plane: the `/name args` line itself never enters the model context; the expanded body is submitted as the session's next user message.
@@ -85,11 +85,13 @@ Repairs two classes of pre-execution rejection, in place:
 
 Both defects present: the program is fixed first, then the description is written for the fixed program (at most two auxiliary calls, one repair record, one rerun).
 
+Repair claims a call only under the runtime contract its preflight mirrors: a TypeScript runtime whose `programFormat` is `function-body` (the default Node PTC runtime; DSH ≥ 0.2.1-rc.3 reports this property). The persistent-in-memory REPL format and other languages keep the baseline path.
+
 Guarantees: repairs rewrite only the **model-visible history** (message projection). The durable session log keeps the original call plus an ignorable `plugin:ptc-repair/*` audit record. Any step failing falls back to the original error path — the feature can never make a session worse.
 
 ## Configuration
 
-Configure in the bundle's loader rows (`cordis.patch.yml`); config is optional, keyed per feature, unknown keys are rejected.
+Configure in the bundle's loader row (`cordis.patch.yml`); config is optional, keyed per feature, unknown keys are rejected.
 
 ### `repair` (global entry `better-ptc`)
 
@@ -100,11 +102,12 @@ Configure in the bundle's loader rows (`cordis.patch.yml`); config is optional, 
 | `maxCodeGrowth` | `2` | Max length of a repaired program relative to the rejected one |
 | `provider` + `model` | session route | Auxiliary-call route override; must be set together |
 
-### `commands` (preset entry `better-ptc-preset`)
+### `commands` (same global entry `better-ptc`)
 
 | Key | Default | Description |
 |---|---|---|
 | `enabled` | `true` | Mount the feature at all |
+| `presets` | `['ptc']` | Agent preset ids whose sessions receive the commands |
 | `projectCommandDirs` | `.agents/commands`, `.dsh/commands` | Project-relative roots, precedence order |
 | `userCommandDirs` | `~/.agents/commands`, `~/.dsh/commands` | Absolute or `~`-relative |
 | `includeClaudeDirs` | `false` | Also scan `.claude/commands/` dirs |
@@ -120,14 +123,16 @@ Example:
       config:
         repair:
           timeoutMs: 30000
+        commands:
+          presets: [ptc, my-custom-preset]
 ```
 
 ## How it works
 
-- Host-only Cordis bundle with two fixed loader rows: `better-ptc` (global, `repair`) and `better-ptc-preset` (preset-scoped, `commands`). New features mount behind these rows without touching the patch again.
-- The `commands` feature rides inside the **shipped `ptc` preset**: the bundle overrides the `preset-ptc` row by id, restating the shipped plugin list verbatim with one row appended. The definition id stays `ptc` — no new mode appears in the roster and default selections are unchanged. Because loader overrides replace `config` wholesale, this copy must track the shipped preset of the pinned DSH version.
-- The preset entry registers commands via `ctx.commands.register` in the preset's scope layer, which is what makes them visible to PTC sessions only.
-- The seven `@deepseek-ai/dsh-*` packages in `peerDependencies` are routed to the DSH installation by the host's linked-root resolution intercept — that is why the exact peer list matters and pnpm's warning is safe to ignore.
+- Host-only Cordis bundle with **one** fixed loader row, `better-ptc`. Both features mount behind it; the patch file never changes with DSH versions.
+- The `commands` feature is preset-gated per agent, not per composition: it reads each agent's live preset id from the preset registry (`ctx.agentPresets.composedPreset`) and registers the effective commands through that agent's own context, so they land in the agent's command layer — visible exactly to agents of the configured presets, shadowing same-name global commands. A blank session switching presets is re-evaluated on its `agent-preset/selected` event, so the menu follows the switch immediately. (Earlier releases instead overrode the shipped `preset-ptc` row with a verbatim copy of its plugin list, which had to be re-copied on every DSH upgrade.)
+- The `repair` feature is a plain global `tools/execute` waterfall listener plus a session message projection; it claims a call only when the mounted PTC runtime reports TypeScript in `function-body` format.
+- The six `@deepseek-ai/dsh-*` packages in `peerDependencies` are routed to the DSH installation by the host's linked-root resolution intercept — that is why the exact peer list matters and pnpm's warning is safe to ignore. `engines.dsh` carries the actual admission check.
 
 ## Development
 
@@ -140,18 +145,17 @@ The package is type-checked and tested inside a DSH source checkout:
 pnpm exec tsc -b --force
 # 3. Test
 pnpm exec vitest run packages/experimental/ptc-repair/tests
-# 4. Copy lib/types/** (both .js and .d.ts, exclude *.map) and the two
-#    lib/*.js stubs back into this repo, then reinstall the bundle
+# 4. Copy lib/types/** (both .js and .d.ts, exclude *.map) and the
+#    lib/index.js stub back into this repo, then reinstall the bundle
 ```
 
-**Upgrading the pinned DSH version** touches: the verbatim `preset-ptc` copy in `cordis.patch.yml` (re-diff against the new shipped `ptc.patch.yml`), `engines.dsh`, and the `peerDependencies` list.
+**Upgrading the supported DSH range** is now mostly a review task: re-verify the consumed APIs against the new source (`engines.dsh`, the `peerDependencies` list, and the two mirrors below) and bump `engines.dsh`. The only verbatim mirrors of DSH internals are the PTC type-strip wrapper in `features/repair/preflight.ts` (a drift degrades repair to baseline, never misrepairs) and the plugin-record vocabulary in `features/repair/records.ts`.
 
 ## Limitations
 
 - Plugin-registered commands render in the `/` menu without leading icons and in the built-in Commands section — `CommandDescriptor` has no icon field. Per-command icons need an upstream DSH extension.
-- Repair never touches runtime exceptions, nested `run_code` calls, or non-TypeScript backends; a repaired program must stay within `maxCodeGrowth`.
-- Commands are mounted PTC-mode-only by design; other presets would need another override row.
-- The verbatim preset copy binds the bundle to the exact DSH version in `engines.dsh`.
+- Repair never touches runtime exceptions, nested `run_code` calls, or non-`function-body` program formats; a repaired program must stay within `maxCodeGrowth`.
+- Command mounts are created when a session is created or first emits an event; a session restored before the plugin activates is picked up at feature mount.
 
 ## License
 

@@ -1,8 +1,9 @@
 /**
- * Configuration for the `commands` feature: which directories are scanned for
- * markdown command files and the discovery budgets. The plugin declares its own
- * standard-schema config so a profile can install the bundle without a
- * schemastery dependency; validation stays fail-loud at load.
+ * Configuration for the `commands` feature: which agent presets receive the
+ * commands, which directories are scanned for markdown command files, and the
+ * discovery budgets. The plugin declares its own standard-schema config so a
+ * profile can install the bundle without a schemastery dependency; validation
+ * stays fail-loud at load.
  *
  * @module dsh-better-ptc/features/commands/config
  */
@@ -17,11 +18,20 @@ const DEFAULT_PROJECT_DIRS = ['.agents/commands', '.dsh/commands'] as const
 const CLAUDE_PROJECT_DIR = '.claude/commands'
 /** Default user-global command directory names under the shared agents/dsh homes. */
 const DEFAULT_USER_DIR_NAMES = ['commands'] as const
+/** Default agent preset ids whose sessions mount the feature. */
+const DEFAULT_PRESETS = ['ptc'] as const
 
 /** User-facing `commands` feature configuration. */
 export interface Config {
   /** Whether the feature mounts at all (default true). */
   enabled?: boolean
+  /**
+   * Agent preset ids whose agents receive the commands. A session's preset is
+   * read live from the preset registry, so a blank session that switches into
+   * or out of a listed preset gains or loses the commands immediately.
+   * Defaults to `ptc`.
+   */
+  presets?: string[]
   /**
    * Project-relative command directories under the discovered project root,
    * highest precedence first. Defaults to `.agents/commands` then `.dsh/commands`.
@@ -43,6 +53,7 @@ export interface Config {
 /** Validated configuration with every default resolved. */
 export interface ResolvedConfig {
   readonly enabled: boolean
+  readonly presets: readonly string[]
   readonly projectDirs: readonly string[]
   readonly userDirs: readonly string[]
   readonly maxDepth: number
@@ -77,6 +88,7 @@ export const Config: StandardSchema<Config> = {
 function normalized(resolved: ResolvedConfig): Config {
   return {
     enabled: resolved.enabled,
+    presets: [...resolved.presets],
     projectCommandDirs: [...resolved.projectDirs],
     userCommandDirs: [...resolved.userDirs],
     includeClaudeDirs: resolved.projectDirs.includes(CLAUDE_PROJECT_DIR),
@@ -89,10 +101,17 @@ function normalized(resolved: ResolvedConfig): Config {
  * Resolve and validate the feature configuration.
  * @param config - raw feature configuration.
  * @returns a detached, deeply immutable configuration.
- * @throws when a directory entry is empty, absolute where relative is required,
- *   or a budget is not a positive integer.
+ * @throws when a preset or directory entry is empty, absolute where relative
+ *   is required, or a budget is not a positive integer.
  */
 export function resolveConfig(config: Config = {}): ResolvedConfig {
+  const presets = [...new Set(config.presets ?? [...DEFAULT_PRESETS])]
+  for (const preset of presets) {
+    if (typeof preset !== 'string' || preset.trim().length === 0) {
+      throw new Error('ptc-commands: presets entries must be non-empty strings')
+    }
+  }
+
   const projectDirs = config.projectCommandDirs === undefined
     ? [...DEFAULT_PROJECT_DIRS]
     : [...config.projectCommandDirs]
@@ -117,6 +136,7 @@ export function resolveConfig(config: Config = {}): ResolvedConfig {
   }
   return Object.freeze({
     enabled: config.enabled ?? true,
+    presets: Object.freeze(presets),
     projectDirs: Object.freeze(projectDirs),
     userDirs: Object.freeze(userDirs.map(dir => resolve(dir))),
     maxDepth,
